@@ -180,13 +180,13 @@ def build_efficient_frontier(
         volatility = math.sqrt(variance)
         points.append((exp_return, volatility, weights))
 
-    points.sort(key=lambda item: item[0])  # sort by expected return
+    points.sort(key=lambda item: item[1])  # sort by volatility
 
     efficient: List[FrontierPoint] = []
-    best_volatility = float("inf")
+    best_return = float("-inf")
     for exp_return, volatility, weights in points:
-        if volatility + 1e-12 < best_volatility:
-            best_volatility = volatility
+        if exp_return > best_return + 1e-12:
+            best_return = exp_return
             efficient.append(
                 FrontierPoint(
                     annual_return=exp_return,
