@@ -47,6 +47,15 @@ def parse_arguments() -> argparse.Namespace:
         default="efficient_frontier.csv",
         help="Where to write the efficient frontier table.",
     )
+    parser.add_argument(
+        "--plot",
+        default=None,
+        help=(
+            "Optional path to save a diagram of the efficient frontier. "
+            "If matplotlib is not available, provide an .svg path to use the "
+            "built-in renderer."
+        ),
+    )
     return parser.parse_args()
 
 
@@ -203,6 +212,110 @@ def write_frontier_to_csv(points: Sequence[FrontierPoint], tickers: Sequence[str
             writer.writerow(row)
 
 
+def _write_svg_frontier(points: Sequence[FrontierPoint], path: str) -> None:
+    width, height = 800, 500
+    margin = 60
+    xs = [point.annual_volatility for point in points]
+    ys = [point.annual_return for point in points]
+
+    min_x, max_x = min(xs), max(xs)
+    min_y, max_y = min(ys), max(ys)
+
+    if math.isclose(max_x, min_x):
+        max_x += 1.0
+        min_x -= 1.0
+    if math.isclose(max_y, min_y):
+        max_y += 1.0
+        min_y -= 1.0
+
+    pad_x = (max_x - min_x) * 0.05
+    pad_y = (max_y - min_y) * 0.05
+    min_x -= pad_x
+    max_x += pad_x
+    min_y -= pad_y
+    max_y += pad_y
+
+    def scale_x(value: float) -> float:
+        return margin + (value - min_x) / (max_x - min_x) * (width - 2 * margin)
+
+    def scale_y(value: float) -> float:
+        return height - margin - (value - min_y) / (max_y - min_y) * (height - 2 * margin)
+
+    points_path = " ".join(
+        f"{scale_x(x):.2f},{scale_y(y):.2f}" for x, y in zip(xs, ys)
+    )
+
+    labels = [
+        f'<text x="{width / 2:.0f}" y="30" text-anchor="middle" font-size="20" '
+        f'font-family="Arial, sans-serif">Efficient Frontier</text>',
+        f'<text x="{width / 2:.0f}" y="{height - 10}" text-anchor="middle" font-size="16" '
+        f'font-family="Arial, sans-serif">Annualised volatility</text>',
+        f'<text transform="rotate(-90)" x="-{height / 2:.0f}" y="20" text-anchor="middle" '
+        f'font-size="16" font-family="Arial, sans-serif">Annualised return</text>',
+    ]
+
+    svg_content = [
+        f'<svg xmlns="http://www.w3.org/2000/svg" width="{width}" height="{height}" '
+        f'viewBox="0 0 {width} {height}">',
+        '<rect x="0" y="0" width="100%" height="100%" fill="white" />',
+        f'<line x1="{margin}" y1="{height - margin}" x2="{width - margin}" '
+        f'y2="{height - margin}" stroke="#444" stroke-width="2" />',
+        f'<line x1="{margin}" y1="{height - margin}" x2="{margin}" '
+        f'y2="{margin}" stroke="#444" stroke-width="2" />',
+        f'<polyline points="{points_path}" fill="none" stroke="#1f77b4" stroke-width="2" />',
+        f'<g fill="#1f77b4">',
+    ]
+
+    for x, y in zip(xs, ys):
+        svg_content.append(
+            f'  <circle cx="{scale_x(x):.2f}" cy="{scale_y(y):.2f}" r="4" />'
+        )
+
+    svg_content.append("</g>")
+
+    for element in labels:
+        svg_content.append(element)
+
+    svg_content.append("</svg>")
+
+    with open(path, "w", encoding="utf-8") as handle:
+        handle.write("\n".join(svg_content))
+
+
+def plot_efficient_frontier(points: Sequence[FrontierPoint], path: str) -> None:
+    if not points:
+        raise ValueError("Cannot plot an empty efficient frontier")
+
+    try:
+        import matplotlib.pyplot as plt
+    except ImportError:
+        if not path.lower().endswith(".svg"):
+            raise RuntimeError(
+                "matplotlib is unavailable. Provide an .svg path for --plot "
+                "to use the built-in SVG renderer."
+            )
+        _write_svg_frontier(points, path)
+        return
+
+    fig, ax = plt.subplots(figsize=(8, 5))
+    ax.plot(
+        [point.annual_volatility for point in points],
+        [point.annual_return for point in points],
+        marker="o",
+        linestyle="-",
+        color="#1f77b4",
+        label="Efficient frontier",
+    )
+    ax.set_xlabel("Annualised volatility")
+    ax.set_ylabel("Annualised return")
+    ax.set_title("Efficient Frontier")
+    ax.grid(True, linestyle="--", linewidth=0.5, alpha=0.7)
+    ax.legend()
+    fig.tight_layout()
+    fig.savefig(path, dpi=150)
+    plt.close(fig)
+
+
 def main() -> None:
     args = parse_arguments()
     tickers, price_history = read_close_prices(args.csv)
@@ -227,6 +340,9 @@ def main() -> None:
 
     frontier = build_efficient_frontier(tickers, annual_expected_returns, annual_covariance, args.step)
     write_frontier_to_csv(frontier, tickers, args.output)
+
+    if args.plot:
+        plot_efficient_frontier(frontier, args.plot)
 
     print(f"Analysed {len(aligned_returns[0])} daily returns for {len(tickers)} assets.")
     print(f"Generated {len(frontier)} efficient portfolios with step size {args.step}.")
