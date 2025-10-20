@@ -1,71 +1,71 @@
-# Efficient Frontier Analysis Project – Progress Report
+# 효율적 프런티어 분석 프로젝트 – 진행 보고서
 
-## Executive Summary
-Over the course of three development iterations we have transformed an initial dataset of equity prices into a reusable analysis pipeline that computes and visualises an approximate efficient frontier for a trio of equities. The workstream began with a raw upload of historical pricing data (`temp.csv`) and culminated in a robust Python application (`efficient_frontier.py`) that parses the vendor-specific CSV structure, computes daily and annualised statistics, enumerates thousands of long-only portfolios, and exports both tabular and graphical artefacts (`efficient_frontier.csv`, `efficient_frontier.svg`). The following pages provide a detailed narrative of the objectives, implementation milestones, analytical outputs, and recommendations for future enhancement.
+## 요약
+세 차례의 개발 반복을 거치면서 우리는 삼성전자(005930.KS), 애플(AAPL), 엔비디아(NVDA)의 주가 이력을 담은 초기 데이터셋을, 세 종목에 대한 효율적 프런티어를 근사 계산하고 시각화하는 재사용 가능한 분석 파이프라인으로 발전시켰습니다. 작업은 원시 형태의 CSV 업로드(`temp.csv`)에서 시작해, 공급사 특유의 구조를 해석하고 일/연간 통계를 계산하며 수천 개의 롱온리 포트폴리오를 열거하고, 표와 그래픽 결과물(`efficient_frontier.csv`, `efficient_frontier.svg`)을 내보내는 탄탄한 파이썬 애플리케이션(`efficient_frontier.py`) 완성으로 이어졌습니다. 이하에서는 목표, 구현 이정표, 분석 산출물, 향후 개선 방향을 서사적으로 정리합니다.
 
-## 1. Project Background and Objectives
-The initial repository snapshot consisted solely of historical price data for Samsung Electronics (005930.KS), Apple (AAPL), and NVIDIA (NVDA). The goal articulated in the early pull requests was twofold: (1) deliver an automated way to calculate the efficient frontier implied by that dataset, and (2) present the results in both machine-readable and visual formats suitable for downstream consumption. From the outset we prioritised transparency and reproducibility—each stage of the pipeline is deterministic, parameterised via command-line arguments, and designed to operate without reliance on proprietary tooling. These objectives guided architectural choices such as explicit CSV header parsing, careful numerical validation, and a plotting layer that gracefully falls back to a built-in SVG renderer when `matplotlib` is unavailable.【F:efficient_frontier.py†L1-L158】【F:efficient_frontier.py†L234-L304】
+## 1. 프로젝트 배경과 목표
+초기 저장소 스냅샷에는 삼성전자, 애플, 엔비디아의 주가 데이터만 존재했습니다. 초기 풀 리퀘스트에서 제시된 목표는 (1) 해당 데이터셋이 함의하는 효율적 프런티어를 자동 계산하고, (2) 결과를 후속 활용이 가능한 머신 리더블/시각적 형식으로 제시하는 것이었습니다. 우리는 처음부터 투명성과 재현성을 중시했습니다. 파이프라인의 각 단계는 결정적이며, 커맨드라인 인자를 통해 매개변수화되었고, 독점 도구에 의존하지 않도록 설계되었습니다. 이러한 목표는 명시적 CSV 헤더 파싱, 정밀한 수치 검증, 그리고 `matplotlib`가 없어도 내장 SVG 렌더러로 우아하게 대체되는 플로팅 계층 같은 아키텍처 선택을 이끌었습니다.【F:efficient_frontier.py†L1-L158】【F:efficient_frontier.py†L234-L304】
 
-## 2. Data Ingestion and Preparation
-### 2.1 Input Format Normalisation
-The uploaded dataset follows a three-row header convention commonly produced by financial data vendors. The first row names the field type (e.g., `Close`), the second row stores the ticker symbol, and the third row contains only the date label. The `read_close_prices` function embodies the first major milestone: it validates the presence of those header rows, locates the columns flagged as closing prices, and normalises ticker labels by trimming whitespace. Any deviation from the expected format—missing rows, absent close columns, or truncated records—triggers descriptive errors that surface data quality issues early in the workflow.【F:efficient_frontier.py†L53-L124】
+## 2. 데이터 적재와 정제
+### 2.1 입력 형식 정규화
+업로드된 데이터셋은 금융 데이터 공급사에서 흔히 볼 수 있는 3행 헤더 관례를 따릅니다. 첫 번째 행은 필드 유형(예: `Close`), 두 번째 행은 티커 심볼, 세 번째 행은 날짜 레이블만 담습니다. `read_close_prices` 함수는 이러한 헤더 행의 존재를 검증하고, 종가로 표시된 열을 찾아내며, 공백을 제거해 티커 라벨을 정규화합니다. 예상 형식에서 벗어나는 경우—누락된 헤더 행, 종가 열 부재, 잘린 레코드—에는 데이터 품질 문제를 초기에 드러내는 설명적 오류가 발생합니다.【F:efficient_frontier.py†L53-L124】
 
-### 2.2 Robust Row-Level Filtering
-Historical price feeds frequently contain partial trading days or suspended instruments. To prevent spurious returns, the ingestion routine skips rows that lack data for any of the required closing price columns, thereby ensuring that the downstream computations operate on consistent vectors. Each row is parsed into floating-point numbers under explicit error handling; malformed entries halt the process with contextual messages, allowing analysts to reconcile anomalies directly with the source provider.【F:efficient_frontier.py†L97-L124】
+### 2.2 행 단위의 견고한 필터링
+역사적 가격 피드는 부분 거래일이나 거래 정지 종목을 포함하는 경우가 많습니다. 잘못된 수익률을 방지하기 위해 적재 루틴은 필요한 종가 열 중 하나라도 비어 있는 행을 건너뛰어, 이후 계산이 일관된 벡터를 기반으로 수행되도록 합니다. 각 행은 명시적 예외 처리가 있는 부동소수점으로 파싱되며, 잘못된 항목은 공급사와 직접 대조할 수 있도록 문맥 정보를 포함한 오류를 발생시킵니다.【F:efficient_frontier.py†L97-L124】
 
-### 2.3 Data Alignment Across Assets
-A second milestone centred on aligning time series of unequal lengths. Because different equities may have disparate listing histories, the script trims each return series to the shortest common history before computing aggregate statistics. This conservative approach guarantees that every covariance estimate is computed from synchronous observations, eliminating biases that would arise from filling missing values or extrapolating returns.【F:efficient_frontier.py†L312-L329】
+### 2.3 자산 간 데이터 정렬
+두 번째 이정표는 길이가 다른 시계열 정렬에 초점을 맞추었습니다. 서로 다른 주식은 상장 이력이 다를 수 있기 때문에, 스크립트는 수익률을 계산하기 전에 가장 짧은 공통 역사에 맞춰 각 시계열을 잘라냅니다. 이 보수적인 접근법은 누락 값을 채우거나 수익률을 외삽할 때 발생할 편향을 제거하여 모든 공분산 추정이 동시 관측치에 기반하도록 보장합니다.【F:efficient_frontier.py†L312-L329】
 
-## 3. Return and Risk Estimation
-### 3.1 Daily Return Calculation
-The `compute_simple_returns` function computes arithmetic daily returns while defending against invalid inputs (zero prices or sequences too short to produce a return). These guardrails were introduced to maintain numerical stability, especially when dealing with illiquid securities or erroneous feed data. The function encapsulates the second development iteration’s emphasis on correctness and error signalling.【F:efficient_frontier.py†L126-L150】
+## 3. 수익률과 위험 추정
+### 3.1 일간 수익률 계산
+`compute_simple_returns` 함수는 산술 일간 수익률을 계산하면서 잘못된 입력(0인 가격, 수익률을 만들기엔 너무 짧은 시퀀스)을 방어합니다. 이러한 안전장치는 특히 유동성이 낮은 증권이나 오류가 포함된 데이터 피드를 다룰 때 수치적 안정성을 유지하기 위해 도입되었습니다. 해당 함수는 두 번째 개발 반복이 올바름과 오류 신호에 집중했음을 보여줍니다.【F:efficient_frontier.py†L126-L150】
 
-### 3.2 Annualisation Strategy
-Daily means and covariances are scaled by the standard trading calendar of 252 sessions per year, a convention explicitly documented via the `TRADING_DAYS_PER_YEAR` constant. This explicit scaling choice simplifies scenario analysis: practitioners can adjust the constant to reflect alternative calendars (e.g., cryptocurrency markets) without rewriting the computational core. The multiplication is performed only after the daily statistics have been assembled, ensuring that the covariance matrix remains positive semi-definite under uniform scaling.【F:efficient_frontier.py†L18-L22】【F:efficient_frontier.py†L330-L341】
+### 3.2 연환산 전략
+일간 평균과 공분산은 연간 252거래일이라는 표준 거래 달력을 기준으로 스케일링됩니다. 이 관례는 `TRADING_DAYS_PER_YEAR` 상수에 명시되어 있어, 실무자가 상수를 조정해 암호화폐 시장과 같은 대체 달력을 반영하더라도 핵심 계산을 수정할 필요가 없습니다. 일간 통계가 완성된 뒤에야 스케일링을 적용하기 때문에 공분산 행렬은 균일 스케일링 하에서도 양의 준정부호성을 유지합니다.【F:efficient_frontier.py†L18-L22】【F:efficient_frontier.py†L330-L341】
 
-### 3.3 Covariance Computation
-Portfolio optimisation hinges on an accurate covariance matrix. The `covariance` helper mirrors textbook definitions, enforcing equal sequence lengths and a minimum of two observations. These checks mitigate silent failures that would otherwise propagate NaNs or zero-division errors into the optimisation phase. The matrix assembly loops in `main()` populate a symmetric grid that captures cross-asset co-movements, laying the groundwork for the frontier construction.【F:efficient_frontier.py†L152-L189】【F:efficient_frontier.py†L330-L341】
+### 3.3 공분산 계산
+포트폴리오 최적화의 핵심은 정확한 공분산 행렬입니다. `covariance` 헬퍼 함수는 교과서 정의를 따르며, 동일한 길이의 시퀀스와 최소 두 개의 관측치를 요구합니다. 이러한 검증은 NaN이나 0으로 나누는 오류가 최적화 단계까지 전파되는 것을 방지합니다. `main()`에 있는 행렬 구성 루프는 대칭 그리드를 채우며 자산 간 상관을 담아 프런티어 구축의 토대를 마련합니다.【F:efficient_frontier.py†L152-L189】【F:efficient_frontier.py†L330-L341】
 
-## 4. Portfolio Enumeration and Frontier Construction
-### 4.1 Weight Grid Generation
-Constructing the efficient frontier requires scanning the feasible space of portfolio weights. The recursive generator `iter_weight_vectors` was implemented to enumerate all combinations of long-only weights whose granularity is governed by a user-selectable step size. By enforcing that the step divides unity exactly, the routine avoids cumulative floating-point drift and ensures that every generated weight vector sums to one. This design supports exploratory analysis: tighter steps yield smoother frontiers at the cost of additional computation, a trade-off made explicit via command-line flags.【F:efficient_frontier.py†L191-L233】
+## 4. 포트폴리오 열거와 프런티어 구축
+### 4.1 가중치 격자 생성
+효율적 프런티어를 구성하려면 가능한 가중치 공간을 탐색해야 합니다. 재귀형 제너레이터 `iter_weight_vectors`는 롱온리 가중치 조합을 모두 열거하며, 세분화 정도는 사용자가 선택하는 단계 크기에 의해 결정됩니다. 해당 단계가 1을 정확히 나누도록 강제해 부동소수점 누적 오차를 피하고, 생성된 모든 가중치 벡터 합이 1이 되도록 합니다. 이 설계는 탐색적 분석을 지원하며, 더 작은 단계는 더 매끄러운 프런티어를 제공하지만 계산량이 늘어나는 트레이드오프를 커맨드라인 플래그로 명시합니다.【F:efficient_frontier.py†L191-L233】
 
-### 4.2 Efficient Frontier Filtering
-After evaluating expected return and volatility for each candidate portfolio, results are sorted by volatility and filtered using a running maximum of expected return. Only portfolios that improve on the best return observed so far are retained, yielding a monotonically increasing efficient set. This logic eliminates dominated portfolios without resorting to third-party optimisation libraries, thereby keeping the implementation lightweight and transparent.【F:efficient_frontier.py†L235-L273】
+### 4.2 효율적 프런티어 필터링
+각 후보 포트폴리오의 기대수익률과 변동성을 평가한 뒤 결과를 변동성 기준으로 정렬하고, 기대수익률의 누적 최대값을 사용해 필터링합니다. 지금까지 관측된 최고 수익률을 갱신하는 포트폴리오만 유지함으로써, 단조 증가하는 효율적 집합이 도출됩니다. 이 로직은 서드파티 최적화 라이브러리 없이도 열등 포트폴리오를 제거해 구현을 가볍고 투명하게 유지합니다.【F:efficient_frontier.py†L235-L273】
 
-### 4.3 Output Structure
-The `FrontierPoint` dataclass encapsulates per-portfolio attributes—annualised return, volatility, and a ticker-to-weight map—which simplifies both CSV serialisation and textual reporting. The report writing function formats each weight with four decimal places, making it straightforward to audit allocations or feed them into other tools. Together, these design choices close the loop between numerical computation and stakeholder communication.【F:efficient_frontier.py†L24-L50】【F:efficient_frontier.py†L275-L304】
+### 4.3 출력 구조
+`FrontierPoint` 데이터클래스는 연환산 수익률, 변동성, 티커별 가중치 맵을 캡슐화해 CSV 직렬화와 텍스트 보고를 단순화합니다. 보고서 작성 함수는 각 가중치를 소수점 네 자리로 포맷하여 할당을 감사하거나 다른 도구에 넘기기 쉽게 만듭니다. 이러한 설계 선택은 수치 계산과 이해관계자 커뮤니케이션 간의 선순환을 완성합니다.【F:efficient_frontier.py†L24-L50】【F:efficient_frontier.py†L275-L304】
 
-## 5. Artefacts Produced to Date
-### 5.1 Tabular Frontier Snapshot
-The repository stores a representative output table, `efficient_frontier.csv`, generated with a 1% weight increment. The leading rows demonstrate how incremental allocations to NVIDIA trade higher expected returns for marginally increased volatility. For example, moving from a 6% to 10% NVDA weight lifts the annualised return from 27.5% to just over 30% while only modestly increasing volatility, illustrating the convexity typical of frontier curves.【F:efficient_frontier.csv†L1-L14】
+## 5. 현재까지 생성된 산출물
+### 5.1 표 형식 프런티어 스냅샷
+저장소에는 1% 가중치 간격으로 생성된 대표 출력 테이블 `efficient_frontier.csv`가 포함돼 있습니다. 첫 부분은 엔비디아 비중을 소폭 늘리면 어떻게 기대수익률이 증가하면서 변동성이 완만하게 상승하는지를 보여줍니다. 예컨대 NVDA 비중을 6%에서 10%로 늘리면 연환산 수익률이 27.5%에서 30% 이상으로 상승하면서도 변동성 증가는 제한적입니다. 이는 프런티어 곡선에서 흔히 볼 수 있는 볼록성을 강조합니다.【F:efficient_frontier.csv†L1-L14】
 
-The tail of the table highlights the upper-right region of the frontier where the portfolio converges toward a 100% NVIDIA allocation, producing annualised returns above 88% at the cost of approximately 52% volatility. This gradient underscores the extremes available to risk-seeking investors within the enumerated grid.【F:efficient_frontier.csv†L89-L109】
+표의 후반부는 포트폴리오가 100% 엔비디아 비중으로 수렴하는 프런티어의 오른쪽 상단을 보여주며, 연환산 수익률이 88%를 넘어서는 대신 약 52%의 변동성을 감수해야 함을 나타냅니다. 이는 탐색된 격자 내에서 위험 선호 투자자가 선택할 수 있는 극단적 옵션을 보여줍니다.【F:efficient_frontier.csv†L89-L109】
 
-### 5.2 Visual Representation
-To support presentations and dashboards, the project also includes an SVG diagram of the frontier. While not reproduced here, the plotting logic adapts dynamically to the execution environment: it prefers `matplotlib` for high-fidelity PNGs but automatically generates vector graphics when dependencies are absent. The custom SVG pipeline scales axes with appropriate padding, draws labelled axes, and annotates the curve with both lines and circular markers to emphasise discrete portfolios.【F:efficient_frontier.py†L306-L341】
+### 5.2 시각적 표현
+프레젠테이션과 대시보드를 지원하기 위해 프로젝트는 프런티어 SVG 도표도 제공합니다. 본 문서에는 그림을 재현하지 않았지만, 플로팅 로직은 실행 환경에 따라 동적으로 적응합니다. 고품질 PNG를 위해 `matplotlib`을 우선 사용하되, 의존성이 없으면 자동으로 벡터 그래픽을 생성합니다. 맞춤형 SVG 파이프라인은 적절한 여백으로 축을 스케일링하고, 축 라벨을 달며, 곡선 위에 선과 원형 마커를 함께 배치해 이산 포트폴리오를 강조합니다.【F:efficient_frontier.py†L306-L341】
 
-### 5.3 Console Summary Output
-Running the script prints a concise summary that quantifies the data analysed and the number of efficient portfolios generated. It also lists the top ten portfolios with percentage-formatted weights, offering immediate insight without requiring users to open the CSV. This textual report aids quick validation during iterative parameter tuning.【F:efficient_frontier.py†L343-L366】
+### 5.3 콘솔 요약 출력
+스크립트를 실행하면 분석한 데이터 규모와 생성된 효율적 포트폴리오 개수를 요약한 문구가 표시됩니다. 또한 상위 10개 포트폴리오를 퍼센트 형식의 가중치와 함께 나열해 CSV를 열지 않아도 즉시 통찰을 제공합니다. 이 텍스트 보고는 매개변수 조정 과정에서 빠른 검증을 돕습니다.【F:efficient_frontier.py†L343-L366】
 
-## 6. Operational Considerations
-### 6.1 Parameterisation and Reproducibility
-All user-facing parameters—the input CSV path, weight step size, output destinations, and optional plot file—are exposed through the command-line parser. Default values mirror the repository layout, allowing a simple `python efficient_frontier.py` invocation to regenerate every artefact currently tracked. This configurability supports experimentation (e.g., finer weight grids or alternative datasets) while keeping the baseline workflow frictionless.【F:efficient_frontier.py†L28-L74】
+## 6. 운영 고려 사항
+### 6.1 매개변수화와 재현성
+입력 CSV 경로, 가중치 단계 크기, 출력 목적지, 선택적 플롯 파일 등 모든 사용자 노출 매개변수는 커맨드라인 파서를 통해 설정할 수 있습니다. 기본값은 저장소 레이아웃을 반영해 `python efficient_frontier.py`만 실행해도 현재 추적 중인 모든 산출물을 재생성할 수 있습니다. 이러한 구성 가능성은 더 촘촘한 가중치 격자나 대체 데이터셋 같은 실험을 지원하면서도 기본 워크플로를 간편하게 유지합니다.【F:efficient_frontier.py†L28-L74】
 
-### 6.2 Error Handling and User Guidance
-A significant portion of the implementation effort was devoted to defensive programming. Errors thrown during argument parsing, CSV ingestion, or computation include clear descriptions to aid troubleshooting. The script explicitly flags situations such as zero prices, mismatched series lengths, and invalid step sizes, preventing ambiguous failures and enhancing trust in the results.【F:efficient_frontier.py†L76-L233】
+### 6.2 오류 처리와 사용자 안내
+구현 노력의 상당 부분은 방어적 프로그래밍에 투자되었습니다. 인자 파싱, CSV 적재, 계산 단계에서 발생하는 오류는 문제 해결을 돕도록 명확한 설명을 포함합니다. 스크립트는 0인 가격, 길이가 맞지 않는 시계열, 잘못된 단계 크기 등을 명시적으로 표시해 애매한 실패를 방지하고 결과에 대한 신뢰를 높입니다.【F:efficient_frontier.py†L76-L233】
 
-### 6.3 Extensibility
-Although the current dataset contains three equities, the architecture scales to larger universes. The portfolio enumeration routine automatically adapts to the number of tickers, and the CSV export writes a column per asset. Analysts can plug in richer datasets by supplying CSVs with the same header convention, adjusting only the `--csv` argument. The modular function layout further facilitates unit testing or integration into larger analytics platforms.【F:efficient_frontier.py†L24-L341】
+### 6.3 확장성
+현재 데이터셋은 세 종목으로 구성되지만 아키텍처는 더 큰 자산군으로 확장 가능합니다. 포트폴리오 열거 루틴은 티커 수에 자동으로 적응하고, CSV 출력은 자산별 열을 생성합니다. 동일한 헤더 규약을 따르는 CSV만 제공하면 `--csv` 인자 조정만으로 더 풍부한 데이터셋을 사용할 수 있습니다. 모듈형 함수 구성은 단위 테스트나 더 큰 분석 플랫폼과의 통합에도 유리합니다.【F:efficient_frontier.py†L24-L341】
 
-## 7. Recommendations and Next Steps
-1. **Expand Asset Coverage:** Incorporate additional tickers or asset classes to explore diversification benefits beyond technology equities. The existing ingestion and enumeration logic supports this with minimal change.
-2. **Introduce Risk-Free Benchmarking:** Augment the script with a Sharpe ratio calculation using a configurable risk-free rate. This would provide a comparable metric for selecting portfolios along the frontier.
-3. **Optimise Enumeration:** For finer step sizes (e.g., 0.005), the combinatorial explosion can become computationally expensive. Investigating vectorised approaches or quadratic programming solvers could accelerate analysis without sacrificing accuracy.
-4. **Automated Testing:** While the functions contain defensive checks, establishing a unit test suite would formalise regression protection as the codebase evolves.
-5. **Interactive Visualisation:** Exporting data to interactive dashboards (e.g., Plotly, Vega-Lite) could make the frontier exploration more intuitive for non-technical stakeholders.
+## 7. 권장 사항과 향후 과제
+1. **자산 범위 확장:** 기술주를 넘어 더 다양한 티커나 자산군을 포함해 분산 투자 이점을 탐색하십시오. 현재의 적재·열거 로직은 최소한의 수정으로 이를 지원합니다.
+2. **무위험 자산 벤치마킹:** 구성 가능한 무위험 이자율을 활용해 샤프 지수를 계산하는 기능을 추가하면 프런티어 상 포트폴리오 선택에 활용할 비교 지표가 마련됩니다.
+3. **열거 최적화:** 더 촘촘한 단계(예: 0.005)를 사용하면 조합 폭발로 계산 비용이 커집니다. 벡터화 기법이나 2차 계획법 솔버를 도입해 정확성을 유지하면서 속도를 높일 수 있습니다.
+4. **자동화된 테스트:** 함수에 방어적 검사가 구현돼 있지만, 단위 테스트 모음을 마련하면 코드베이스 진화 시 회귀를 체계적으로 방지할 수 있습니다.
+5. **인터랙티브 시각화:** Plotly, Vega-Lite 같은 도구로 인터랙티브 대시보드를 제공하면 비기술 이해관계자도 프런티어를 직관적으로 탐색할 수 있습니다.
 
-These initiatives will ensure that the project remains robust, scalable, and aligned with stakeholder expectations as new datasets and analytical requirements emerge.
+이러한 제안은 새로운 데이터셋과 분석 요구가 등장하더라도 프로젝트가 견고하고 확장 가능하며 이해관계자 기대에 부합하도록 도울 것입니다.
 
 ---
-*Prepared by: Development Team*
+*작성: 개발팀*
